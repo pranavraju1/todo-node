@@ -5,6 +5,7 @@ const session = require("express-session");
 const mongoDbSession = require("connect-mongodb-session")(session);
 require("dotenv").config();
 const { cleanupAndValidate } = require("./utils/authUtil");
+const bcrypt = require("bcrypt");
 
 const app = express();
 const PORT = process.env.PORT;
@@ -74,6 +75,8 @@ app.post("/signup", async (req, res) => {
       error: error,
     });
   }
+
+  // checking if email and username is unique
   const userEmailExist = await userSchema.findOne({ email });
   if (userEmailExist) {
     return res.send({
@@ -90,7 +93,21 @@ app.post("/signup", async (req, res) => {
     });
   }
 
-  const userObj = new userSchema({ name, email, username, password });
+  //hashing password
+  const hashedpassword = await bcrypt.hash(
+    password,
+    parseInt(process.env.SALT)
+  );
+  console.log(password, hashedpassword);
+
+  const userObj = new userSchema({
+    name,
+    email,
+    username,
+    password: hashedpassword,
+  });
+  // const userObj = new userSchema({ name, email, username, password });
+
   try {
     const userDb = await userObj.save();
     return res.redirect("/login");
