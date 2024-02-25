@@ -4,6 +4,7 @@ const userSchema = require("./schema/userSchema");
 const session = require("express-session");
 const mongoDbSession = require("connect-mongodb-session")(session);
 require("dotenv").config();
+const { cleanupAndValidate } = require("./utils/authUtil");
 
 const app = express();
 const PORT = process.env.PORT;
@@ -44,6 +45,8 @@ app.get("/signup", async (req, res) => {
         <input type="text" name="name" />
         <label for="email">Email:</label>
         <input type="text" name="email" />
+        <label for="username">Username:</label>
+        <input type="text" name="username" />
         <label for="password">Password:</label>
         <input type="text" name="password" />
       <button type="submit">Submit</button>
@@ -59,16 +62,42 @@ app.post("/signup", async (req, res) => {
   const name = req.body.name;
   const email = req.body.email;
   const password = req.body.password;
-  console.log(name, email, password);
-  const userObj = new userSchema({ name, email, password });
-  console.log(userObj);
+  const username = req.body.username;
+  // console.log(userObj);
+  try {
+    await cleanupAndValidate({ name, email, username, password });
+    console.log("data cleaned");
+  } catch (error) {
+    return res.send({
+      status: 404,
+      message: "Data error",
+      error: error,
+    });
+  }
+  const userEmailExist = await userSchema.findOne({ email });
+  if (userEmailExist) {
+    return res.send({
+      status: 404,
+      message: "Email already exists",
+    });
+  }
+
+  const userUsernameExist = await userSchema.findOne({ username });
+  if (userUsernameExist) {
+    return res.send({
+      status: 404,
+      message: "Username already exists",
+    });
+  }
+
+  const userObj = new userSchema({ name, email, username, password });
   try {
     const userDb = await userObj.save();
     return res.redirect("/login");
   } catch (error) {
     return res.send({
       status: 500,
-      message: "DB error",
+      message: "Data base error",
       error: error,
     });
   }
@@ -77,7 +106,7 @@ app.post("/signup", async (req, res) => {
 app.get("/login", async (req, res) => {
   return res.send(
     `
-    <html lang="en">
+    <html>
   <body>
     <h1>Login</h1>
     <form action="/login" method="POST">
@@ -89,7 +118,6 @@ app.get("/login", async (req, res) => {
     </form>
   </body>
 </html>
-
     `
   );
 });
