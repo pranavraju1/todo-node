@@ -6,6 +6,7 @@ const mongoDbSession = require("connect-mongodb-session")(session);
 require("dotenv").config();
 const { cleanupAndValidate } = require("./utils/authUtil");
 const bcrypt = require("bcrypt");
+const validator = require("validator");
 
 const app = express();
 const PORT = process.env.PORT;
@@ -19,7 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: "Try testing",
+    secret: process.env.SECRET_KEY,
     resave: false,
     saveUninitialized: false,
     store: store,
@@ -139,16 +140,54 @@ app.get("/login", async (req, res) => {
   );
 });
 app.post("/login", async (req, res) => {
-  const email = req.body.email;
+  const { loginId, password } = req.body;
   try {
-    const userDb = await userSchema.findOne({ email });
-    if (!userDb) {
-      return res.send("user not found");
+    let userDb;
+    if (validator.isEmail(loginId)) {
+      userDb = await userSchema.findOne({ email: loginId });
+      if (!userDb) {
+        return res.send({
+          status: 404,
+          message: "Email not found",
+        });
+      }
+    } else {
+      userDb = await userSchema.findOne({ username: loginId });
+      if (!userDb) {
+        return res.send({
+          status: 404,
+          message: "Username not found",
+        });
+      }
     }
+    console.log("user found", userDb);
+
+    // comparing password
+    console.log(userDb.password, password);
+    const isMatched = await bcrypt.compare(password, userDb.password);
+    if (!isMatched) {
+      return res.send({
+        status: 404,
+        message: "Password incorrect",
+      });
+    }
+
+    //storing session
+    console.log(req.session);
     req.session.isAuth = true;
-    return res.send("user found");
+    req.session.user = {
+      email: userDb.email,
+      username: userDb.username,
+      userId: userDb._id,
+    };
+
+    return res.redirect("/dashboard");
   } catch (err) {
-    return res.send("database error");
+    res.send({
+      status: 500,
+      message: "Database error",
+      error: err,
+    });
   }
 });
 
